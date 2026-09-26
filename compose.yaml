@@ -1,0 +1,12 @@
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: shop
+      POSTGRES_PASSWORD: shop
+      POSTGRES_DB: shop
+    # Every statement is logged, which is how verify.sh counts the queries
+    # behind one GraphQL request.
+    command: ["postgres", "-c", "log_statement=all", "-c", "log_line_prefix=db=%d "]
+    ports:
+      - "${POSTGRES_PORT:-5441}:5432"
