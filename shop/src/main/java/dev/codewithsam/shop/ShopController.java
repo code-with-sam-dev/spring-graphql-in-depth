@@ -17,7 +17,6 @@ import org.springframework.graphql.data.method.annotation.SubscriptionMapping;
 import org.springframework.graphql.data.query.ScrollSubrange;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Controller;
-import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Sinks;
 
@@ -28,15 +27,18 @@ public class ShopController {
     private final OrderLineRepository lines;
     private final CustomerRepository customers;
     private final ProductRepository products;
+    private final OrderService service;
     private final Sinks.Many<Order> statusChanges =
             Sinks.many().multicast().onBackpressureBuffer();
 
     public ShopController(OrderRepository orders, OrderLineRepository lines,
-                          CustomerRepository customers, ProductRepository products) {
+                          CustomerRepository customers, ProductRepository products,
+                          OrderService service) {
         this.orders = orders;
         this.lines = lines;
         this.customers = customers;
         this.products = products;
+        this.service = service;
     }
 
     @QueryMapping
@@ -54,10 +56,8 @@ public class ShopController {
     }
 
     @MutationMapping
-    @Transactional
     public Order shipOrder(@Argument Long id) {
-        Order order = order(id);
-        order.ship();
+        Order order = service.ship(id);
         statusChanges.tryEmitNext(order);
         return order;
     }

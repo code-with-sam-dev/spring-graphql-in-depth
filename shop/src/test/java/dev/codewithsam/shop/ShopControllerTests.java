@@ -24,6 +24,7 @@ class ShopControllerTests {
     @MockitoBean OrderLineRepository lines;
     @MockitoBean CustomerRepository customers;
     @MockitoBean ProductRepository products;
+    @MockitoBean OrderService service;
 
     @Test
     void returnsTheFieldsAskedFor() {

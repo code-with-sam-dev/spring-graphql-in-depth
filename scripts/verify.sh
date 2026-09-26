@@ -38,8 +38,9 @@ start() {
   : > "$WORK/shop.log"
   "$JAVA" -jar "$1" >> "$WORK/shop.log" 2>&1 &
   echo $! > "$WORK/shop.pid"
+  # The port opens before the seed data is written, so wait for the data.
   for _ in $(seq 1 120); do
-    curl -s -o /dev/null "$URL/api/orders" && return 0
+    [ "$(curl -s "$URL/api/orders" 2>/dev/null | jq 'length' 2>/dev/null)" = 20 ] && return 0
     kill -0 "$(cat "$WORK/shop.pid")" 2>/dev/null || fail "the service exited, see shop.log"
     sleep 0.5
   done
@@ -71,6 +72,17 @@ say "Build and start the service"
 JAR=$(build) || fail "the service did not build"
 start "$JAR"
 grep -A6 "GraphQL schema inspection" "$WORK/shop.log" | sed 's/^[^ ]* *//' > "$WORK/inspection.log" || true
+
+# --- 0. The query language in one document ------------------------------------
+say "0. queries/order-screen.graphql: variables, an alias, a fragment, a directive"
+for with in true false; do
+  curl -s "$URL/graphql" -H 'content-type: application/json' \
+    --data "$(jq -n --rawfile q queries/order-screen.graphql --argjson w $with '{query: $q, variables: {id: "1", withLines: $w}}')" \
+    | tee "$WORK/document-$with.json" | jq -c .
+done
+[ "$(jq -r '.data.current.customer.name' "$WORK/document-true.json")" = Ada ] || fail "the document should resolve through the fragment"
+[ "$(jq '.data.current.lines | length' "$WORK/document-true.json")" = 2 ] || fail "include true should return the lines"
+[ "$(jq '.data.current | has("lines")' "$WORK/document-false.json")" = false ] || fail "include false should drop the lines"
 
 # --- 1. REST against GraphQL, for two screens ---------------------------------
 say "1. The order list screen: id, status, total and the customer's name, twenty times"
@@ -210,18 +222,18 @@ curl -s -w '\nHTTP %{http_code}\n' "$URL/graphql" -H 'content-type: application/
 grep -q "HTTP 400" "$WORK/removed.log" && grep -q "ValidationError" "$WORK/removed.log" || fail "removing the field should break the old query"
 stop; start "$JAR"
 
-# --- 13. Batching is not caching ----------------------------------------------
-say "13. Two root fields asking for the same products, then the same request again"
-TWICE='{ a: order(id: 1) { lines { product { name } } } b: order(id: 1) { lines { product { name } } } }'
+# --- 13. What a data loader remembers ------------------------------------------
+say "13. The deep query from claim 2, sent twice"
+start "$JAR"
 mark
-gql "$TWICE" > /dev/null
+gql "$DEEP_Q" > /dev/null
 sleep 1
-FIRST=$(selects product)
-gql "$TWICE" > /dev/null
+ONCE=$(selects product)
+gql "$DEEP_Q" > /dev/null
 sleep 1
-BOTH=$(selects product)
-echo "one request, two root fields, same products: $FIRST product selects, one batch per root field; after a second identical request: $BOTH" | tee "$WORK/batching.log"
-[ "$FIRST" = 2 ] && [ "$BOTH" = 4 ] || fail "expected one batch per root field, and nothing reused across requests"
+TWICE=$(selects product)
+echo "product selects after one request: $ONCE; after the same request again: $TWICE" | tee "$WORK/batching.log"
+[ "$ONCE" = 1 ] && [ "$TWICE" = 2 ] || fail "each request should load again: data loader state lives for one request"
 stop
 
 # --- 11. Slice tests ----------------------------------------------------------

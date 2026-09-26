@@ -1,0 +1,17 @@
+# One document, the pieces of the query language this video uses.
+query OrderScreen($id: ID!, $withLines: Boolean!) {
+  current: order(id: $id) {
+    ...OrderSummary
+    lines @include(if: $withLines) {
+      quantity
+      product { name }
+    }
+  }
+}
+
+fragment OrderSummary on Order {
+  id
+  status
+  amount
+  customer { name }
+}
