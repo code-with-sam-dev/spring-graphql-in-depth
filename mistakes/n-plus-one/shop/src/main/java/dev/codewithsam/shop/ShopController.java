@@ -82,6 +82,13 @@ public class ShopController {
         return products.findById(line.getSku()).orElseThrow();
     }
 
+    // Schema evolution: the new field is added beside the old one, and the old
+    // one is deprecated rather than removed, so clients that ask for it keep working.
+    @SchemaMapping
+    public long amount(Order order) {
+        return order.getTotal();
+    }
+
     // Field level security: without the role this one field is null, and the
     // rest of the response still arrives.
     @SchemaMapping

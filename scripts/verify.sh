@@ -198,6 +198,32 @@ cat "$WORK/subscription.log"
 grep -q '"status":"SHIPPED"' "$WORK/subscription.log" || fail "expected a SHIPPED event"
 stop
 
+# --- 12. Schema evolution ------------------------------------------------------
+say "12. total is renamed to amount: deprecate, then remove"
+start "$JAR"
+gql '{ order(id: 1) { total amount } }' | tee "$WORK/deprecated.json" | jq -c .
+[ "$(jq -r '.data.order.total' "$WORK/deprecated.json")" = 3000 ] && [ "$(jq '.errors // [] | length' "$WORK/deprecated.json")" = 0 ] \
+  || fail "a deprecated field should still answer, with no error"
+stop; start "$(build field-removed)"
+curl -s -w '\nHTTP %{http_code}\n' "$URL/graphql" -H 'content-type: application/json' -H 'accept: application/graphql-response+json' \
+  --data '{"query":"{ order(id: 1) { total } }"}' | tee "$WORK/removed.log"
+grep -q "HTTP 400" "$WORK/removed.log" && grep -q "ValidationError" "$WORK/removed.log" || fail "removing the field should break the old query"
+stop; start "$JAR"
+
+# --- 13. Batching is not caching ----------------------------------------------
+say "13. Two root fields asking for the same products, then the same request again"
+TWICE='{ a: order(id: 1) { lines { product { name } } } b: order(id: 1) { lines { product { name } } } }'
+mark
+gql "$TWICE" > /dev/null
+sleep 1
+FIRST=$(selects product)
+gql "$TWICE" > /dev/null
+sleep 1
+BOTH=$(selects product)
+echo "one request, two root fields, same products: $FIRST product selects, one batch per root field; after a second identical request: $BOTH" | tee "$WORK/batching.log"
+[ "$FIRST" = 2 ] && [ "$BOTH" = 4 ] || fail "expected one batch per root field, and nothing reused across requests"
+stop
+
 # --- 11. Slice tests ----------------------------------------------------------
 say "11. The controller, tested without a database"
 (cd shop && ./mvnw -q test > "$WORK/tests.log" 2>&1) || fail "the slice tests failed"

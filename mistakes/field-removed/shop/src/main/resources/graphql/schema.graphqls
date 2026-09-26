@@ -14,7 +14,6 @@ type Subscription {
 type Order {
     id: ID!
     status: OrderStatus!
-    total: Int! @deprecated(reason: "Renamed to amount")
     amount: Int!
     placedAt: String!
     customer: Customer!
