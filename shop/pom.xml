@@ -15,6 +15,9 @@
 	<description>GraphQL in depth, with Spring Boot</description>
 
 	<properties>
+		<!-- Spring Boot 4.1.1 ships Tomcat 11.0.24, which has three critical advisories
+		     (GHSA-9xv2-5v5q-p794, GHSA-gcx9-497g-6cp6, GHSA-h3x4-894j-xpx5). -->
+		<tomcat.version>11.0.26</tomcat.version>
 		<java.version>25</java.version>
 	</properties>
 
